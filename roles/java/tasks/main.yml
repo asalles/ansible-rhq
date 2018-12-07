@@ -1,0 +1,5 @@
+---
+- name: install java {{openjdk_version}}
+  yum: 
+    name: "java-{{openjdk_version}}-openjdk-devel"
+    state: present

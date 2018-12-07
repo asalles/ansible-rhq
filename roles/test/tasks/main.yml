@@ -1,0 +1,4 @@
+---
+- name: Waiting finish 1 minute
+  pause:
+   minutes: 1

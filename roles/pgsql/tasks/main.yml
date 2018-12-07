@@ -1,0 +1,30 @@
+---
+- name: install postgresql
+  yum: 
+    name: "{{item}}"
+    state: present
+  with_items:
+      - postgresql-server
+      - postgresql
+      - postgresql-contrib
+      - python-psycopg2
+
+- name: init postgresql
+  shell: postgresql-setup initdb
+
+- name: set postgres password
+  user:
+    name: postgres
+    password: "{{postgres_posix_password | password_hash('sha512') }}"
+
+- name: enable postgresql
+  service:
+    name: "postgresql"
+    enabled: yes
+    state: started
+
+- name: reload postgresql config
+  shell: pg_ctl reload
+  environment:
+    PGDATA: /var/lib/pgsql/data
+  become_user: postgres

@@ -1,0 +1,17 @@
+---
+postgres_posix_password: cautiva
+openjdk_version: 1.7.0
+
+rhq_user:        rhq                         # no cambiar... en duro (FIX IT) 
+rhq_pass:        "{{rhq_user}}"               
+rhq_passhash:    "9Ufjm9+GRy3iNCwMPAG5+Q=="  # (rhq) generado con "rhqctl install"
+
+rhq_service:     "{{rhq_user}}"
+rhq_db:          "{{rhq_user}}"
+rhq_dbuser:      rhqadmin
+rhq_dbpass:      "{{rhq_user}}"
+rhq_dbpasshash:  "34dd4e5bd20222b8"          # (rhq) generado con "rhqctl install"
+
+rhq_repo: "http://vpn.cautivatech.com/sw/rhq"
+rhq_package: "rhq-server-4.13.1"
+

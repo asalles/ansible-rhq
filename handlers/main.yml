@@ -1,0 +1,11 @@
+---
+# handlers file for ansible-rhq
+
+- name: init postgresql
+  shell: postgresql-setup initdb
+
+- name: reload postgresql config
+  shell: pg_ctl reload
+  environment:
+    PGDATA: /var/lib/pgsql/data
+  become_user: postgres

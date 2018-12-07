@@ -1,0 +1,167 @@
+---
+- name: "Create RHQ User"
+  user: 
+    name: "{{rhq_user}}"
+    shell: /sbin/nologin
+    state: present
+#   password: "{{ rhq_user | password_hash('sha512') }}"
+
+
+- name: Creando usuario {{rhq_dbuser}}
+  command: "runuser -l postgres -c \"createuser -S -D -R {{rhq_dbuser}}\""
+#  command: "runuser -l postgres -c \"createuser -h 127.0.0.1 -p 5432 -U postgres -S -D -R {{rhq_dbuser}}\""
+
+- name: Creando DB {{rhq_db}}
+  command: "runuser -l postgres -c \"createdb -O {{rhq_dbuser}} {{rhq_db}}\""
+
+- name: Change Password for {{rhq_dbuser}}
+  become_user: postgres
+#  command: runuser -l postgres -c \"psql -c \"alter user {{rhq_dbuser}} with encrypted password '{{rhq_dbpass}}'\"
+  command: "psql -c \"alter user {{rhq_dbuser}} with encrypted password '{{rhq_dbpass}}'\""
+
+- name: tuning postgresql ident for DB authentication
+  lineinfile:
+    backrefs: yes
+    dest: /var/lib/pgsql/data/pg_hba.conf
+    regexp: '(^host\s+all\s+all\s+127.0.0.1/32\s+)ident$'
+    line: '\1 md5'
+
+- name: tuning postgresql listen_address 0.0.0.0
+  replace:
+    dest: /var/lib/pgsql/data/postgresql.conf
+    regexp: "#listen_addresses = 'localhost'"
+    replace: "listen_addresses = \'*\'"
+
+- name: tuning postgresql shared_buffers
+  replace:
+    dest: /var/lib/pgsql/data/postgresql.conf
+    regexp: "shared_buffers = 32MB"
+    replace: "shared_buffers = 80MB"
+
+- name: tuning postgresql work_mem
+  replace:
+    dest: /var/lib/pgsql/data/postgresql.conf
+    regexp: "#work_mem = 1MB"
+    replace: "work_mem = 2048"
+
+- name: tuning postgresql checkpoint_segments
+  replace:
+    dest: /var/lib/pgsql/data/postgresql.conf
+    regexp: "#checkpoint_segments = 3"
+    replace: "checkpoint_segments = 10"
+
+- name: tuning postgresql statement_timeout
+  replace:
+    dest: /var/lib/pgsql/data/postgresql.conf
+    regexp: "#statement_timeout = 0"
+    replace: "statement_timeout = 0"
+
+- name: Restart service postgresql
+  service:
+    name: postgresql
+    state: restarted
+
+- name: instalando dependencias
+  yum: 
+    name: unzip
+    state: present
+
+- name: Descargando RHQ from repo.
+  get_url: url={{rhq_repo}}/{{ item }}.zip dest=/tmp/{{ item }}.zip mode=0440
+  with_items:
+    - "{{rhq_package}}"
+
+- name: Descomprimiendo RHQ package
+  unarchive: src=/tmp/{{rhq_package}}.zip  dest=/opt copy=no
+
+- name: link simbolico /opt/rhq
+  file: src=/opt/{{rhq_package}} dest=/opt/rhq state=link force=yes
+
+- name: Recorriendo permisos RHQ
+  file:
+    path: "/opt/rhq"
+    owner: "{{rhq_user}}"
+    group: "{{rhq_service}}"
+    state: "directory"
+    recurse: "yes"
+
+- name: Crear archivo de configuracion para {{rhq_service}} como servicio
+  copy: content="" dest=/etc/systemd/system/{{rhq_service}}.service force=no owner={{ rhq_user }} group={{ rhq_user }}
+  when: ansible_distribution_major_version == "7"
+
+- name: Instalar {{rhq_service}} como servicio
+  lineinfile: dest=/etc/systemd/system/{{rhq_service}}.service line={{ item }}
+  with_items:
+     - "[Unit]"
+     - Description={{rhq_service}} Server
+     - After=syslog.target network.target
+     - ""
+     - "[Service]"
+     - Type=forking
+     - ExecStart=/opt/{{rhq_service}}/bin/rhqctl start
+     - ExecStop=/opt/{{rhq_service}}/bin/rhqctl stop
+     - User={{rhq_service}}
+     - Group={{rhq_service}}
+     - ""
+     - "[Install]"
+     - WantedBy=multi-user.target
+  when: ansible_distribution_major_version == "7"
+
+- name: systemctl daemon-reload
+  shell: systemctl daemon-reload
+  when: ansible_distribution_major_version == "7"
+
+- name: pre-install rhq... jboss.bind.address
+  replace:
+    dest: /opt/{{rhq_service}}/bin/rhq-server.properties
+    regexp: "jboss.bind.address="
+    replace: "jboss.bind.address={{ ansible_ssh_host }}"
+
+- name: pre-install rhq... jboss.bind.address.management
+  replace:
+    dest: /opt/{{rhq_service}}/bin/rhq-server.properties
+    regexp: "jboss.bind.address.management=127.0.0.1"
+    replace: "jboss.bind.address.management={{ ansible_ssh_host }}"
+
+- name: pre-install rhq... rhq.autoinstall.server.admin.password=rhq
+  replace:
+    dest: /opt/{{rhq_service}}/bin/rhq-server.properties
+    regexp: "rhq.autoinstall.server.admin.password="
+    replace: "rhq.autoinstall.server.admin.password={{rhq_passhash}}"
+
+- name: pre-install rhq... rhq.server.database.password=rhq (FIX IT)
+  replace:
+    dest: /opt/{{rhq_service}}/bin/rhq-server.properties
+    regexp: "rhq.server.database.password=1eeb2f255e832171df8592078de921bc"
+    replace: "rhq.server.database.password={{rhq_dbpasshash}}"
+
+- name: Instalando RHQ (ver /root/rhq.log)
+  shell: "/opt/{{rhq_service}}/bin/rhqctl install | tee /root/rhq.log"
+
+- name: Recorriendo permisos RHQ
+  file:
+    path: "/opt/{{rhq_service}}"
+    owner: "{{rhq_user}}"
+    group: "{{rhq_service}}"
+    state: "directory"
+    recurse: "yes"
+
+- name: Recorriendo permisos RHQ Storage
+  file:
+    path: "/opt/rhq-data"
+    owner: "{{rhq_user}}"
+    group: "{{rhq_service}}"
+    state: "directory"
+    recurse: "yes"
+
+- name: Recorriendo permisos RHQ Agent
+  file:
+    path: "/opt/rhq-agent"
+    owner: "{{rhq_user}}"
+    group: "{{rhq_service}}"
+    state: "directory"
+    recurse: "yes"
+
+- name: Enable {{rhq_service}} to be started at boot
+  service: name={{rhq_service}}.service enabled=yes state=started
+  when: ansible_distribution_major_version == "7"
