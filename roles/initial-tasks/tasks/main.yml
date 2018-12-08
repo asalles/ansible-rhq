@@ -15,7 +15,7 @@
   with_items:
    - clean.sh
 
-- name: FIX DNS 8.8.8.8
-  template: src={{item}} dest=/etc/{{item}}
-  with_items:
-   - resolv.conf
+#- name: FIX DNS 8.8.8.8
+#  template: src={{item}} dest=/etc/{{item}}
+#  with_items:
+#   - resolv.conf
