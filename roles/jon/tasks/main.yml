@@ -70,6 +70,7 @@
   get_url: url={{rhq_repo}}/{{ item }}.zip dest=/tmp/{{ item }}.zip mode=0440
   with_items:
     - "{{rhq_package}}"
+  ignore_errors: True  
 
 - name: Descomprimiendo RHQ package
   unarchive: src=/tmp/{{rhq_package}}.zip  dest=/opt copy=no
